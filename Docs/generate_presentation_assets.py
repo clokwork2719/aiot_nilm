@@ -88,17 +88,27 @@ def load_all_metrics() -> list[dict]:
     return records
 
 
+# 簡報圖表固定使用 engineered（專案的 champion 配置）；results/ 內可能同時
+# 存在 hybrid 等其他特徵法的結果，因此索引 key 必須含 features 以免互相覆蓋。
+FEATURES = "engineered"
+
+
 def index_metrics(records: list[dict]) -> dict:
-    """以 (model, contamination, label_ratio) 為 key 建索引，方便查表。"""
+    """以 (features, model, contamination, label_ratio) 為 key 建索引。"""
     idx = {}
     for m in records:
-        key = (m["model"], round(float(m["contamination"]), 2), round(float(m["label_ratio"]), 2))
+        key = (
+            m.get("features", "engineered"),
+            m["model"],
+            round(float(m["contamination"]), 2),
+            round(float(m["label_ratio"]), 2),
+        )
         idx[key] = m
     return idx
 
 
-def get(idx: dict, model: str, cont: float, lr: float) -> dict | None:
-    return idx.get((model, round(cont, 2), round(lr, 2)))
+def get(idx: dict, model: str, cont: float, lr: float, features: str = FEATURES) -> dict | None:
+    return idx.get((features, model, round(cont, 2), round(lr, 2)))
 
 
 # ---------------------------------------------------------------------------

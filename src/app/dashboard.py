@@ -160,11 +160,12 @@ with st.sidebar:
     st.markdown("## ⚡ Controls")
     st.markdown("---")
 
+    _feat_options = ["engineered", "raw", "hybrid"]
     feature_method = st.selectbox(
         "Feature Method",
-        ["engineered", "raw"],
-        index=0 if _cli_features == "engineered" else 1,
-        help="engineered = 14-dim hand-crafted | raw = 26-dim normalised hourly",
+        _feat_options,
+        index=_feat_options.index(_cli_features) if _cli_features in _feat_options else 0,
+        help="engineered = 14-dim hand-crafted | raw = 26-dim normalised hourly | hybrid = 22-dim (engineered + 8 sequence hours)",
     )
 
     scope = st.selectbox(
@@ -436,6 +437,91 @@ with tab_stats:
                 title="Per-Attack Detection Metrics",
             )
             st.plotly_chart(fig_radar, width="stretch")
+
+    # ── Precision–Recall trade-off with adjustable threshold ──────────────
+    st.markdown("---")
+    st.markdown("### Precision–Recall Trade-off（可調閾值）")
+    st.caption(
+        "IForest 的 contamination 只是一個預設切點。拉動下方的異常分數閾值，"
+        "即時觀察 precision / recall / F1 如何隨『標記得多嚴格』而此消彼長 —— "
+        "竊電偵測通常該偏向高 recall（寧可多查，不要漏抓）。"
+    )
+
+    from sklearn.metrics import (
+        precision_recall_curve,
+        precision_score,
+        recall_score,
+        f1_score,
+    )
+
+    y_true = (df_all["label"] != "normal").astype(int).values
+    y_score = df_all["anomaly_score"].values
+    attack_rate = float(y_true.mean())
+
+    if len(np.unique(y_true)) < 2:
+        st.info("此設定下沒有同時包含正常與攻擊樣本，無法繪製 PR 曲線。")
+    else:
+        score_min, score_max = float(np.min(y_score)), float(np.max(y_score))
+        # 預設閾值 = 重現目前 pred_flag 的切點（被標記者中的最低分數）
+        flagged_scores = y_score[df_all["pred_flag"].astype(int).values == 1]
+        default_thr = float(np.min(flagged_scores)) if len(flagged_scores) else float(np.median(y_score))
+        default_thr = min(max(default_thr, score_min), score_max)
+        step = max((score_max - score_min) / 200.0, 1e-6)
+
+        thr = st.slider(
+            "異常分數閾值（≥ 視為竊電）",
+            min_value=round(score_min, 4),
+            max_value=round(score_max, 4),
+            value=round(default_thr, 4),
+            step=round(step, 6),
+            help="調高 → 更保守（precision↑ recall↓）；調低 → 更積極（recall↑ precision↓）",
+        )
+
+        y_pred = (y_score >= thr).astype(int)
+        prec = precision_score(y_true, y_pred, zero_division=0)
+        rec = recall_score(y_true, y_pred, zero_division=0)
+        f1v = f1_score(y_true, y_pred, zero_division=0)
+        flag_rate = float(y_pred.mean())
+        lift = prec / attack_rate if attack_rate > 0 else 0.0
+
+        pc1, pc2, pc3, pc4 = st.columns(4)
+        pc1.metric("Precision", f"{prec:.1%}")
+        pc2.metric("Recall", f"{rec:.1%}")
+        pc3.metric("F1", f"{f1v:.3f}")
+        pc4.metric(
+            "Lift vs Random", f"{lift:.2f}×",
+            delta=f"{lift - 1:.2f}× 優於隨機",
+            help=f"隨機抽查命中率 = 母體竊電率 {attack_rate:.1%}",
+        )
+        st.caption(
+            f"目前閾值會標記 **{flag_rate:.1%}** 的窗格為竊電；"
+            f"隨機抽查同樣比例只能達到 precision ≈ **{attack_rate:.1%}**。"
+        )
+
+        # PR 曲線 + 目前操作點
+        precisions, recalls, _ = precision_recall_curve(y_true, y_score)
+        fig_pr = go.Figure()
+        fig_pr.add_trace(go.Scatter(
+            x=recalls, y=precisions, mode="lines",
+            name="PR 曲線", line=dict(color="#4cc9f0", width=2),
+        ))
+        fig_pr.add_trace(go.Scatter(
+            x=[rec], y=[prec], mode="markers",
+            name="目前閾值", marker=dict(color="#f72585", size=14, symbol="x"),
+        ))
+        fig_pr.add_hline(
+            y=attack_rate, line=dict(color="#888888", width=1.5, dash="dot"),
+            annotation_text=f"隨機基準 (precision={attack_rate:.0%})",
+            annotation_position="bottom right",
+        )
+        fig_pr.update_layout(
+            title="Precision–Recall 曲線",
+            xaxis=dict(title="Recall", range=[0, 1], gridcolor="#1e1e2e"),
+            yaxis=dict(title="Precision", range=[0, 1], gridcolor="#1e1e2e"),
+            paper_bgcolor="#0f0f1a", plot_bgcolor="#0f0f1a", font_color="#e0e0e0",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02),
+        )
+        st.plotly_chart(fig_pr, use_container_width=True)
 
     st.markdown("### Attack Type Distribution (This House)")
     label_counts = df["label"].value_counts().reset_index()

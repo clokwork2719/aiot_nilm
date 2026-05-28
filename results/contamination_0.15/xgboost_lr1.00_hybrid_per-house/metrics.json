@@ -1,0 +1,110 @@
+{
+  "overall": {
+    "0": {
+      "precision": 0.9780666125101544,
+      "recall": 0.9563145353455124,
+      "f1-score": 0.9670682730923694,
+      "support": 2518.0
+    },
+    "1": {
+      "precision": 0.7940074906367042,
+      "recall": 0.8870292887029289,
+      "f1-score": 0.8379446640316206,
+      "support": 478.0
+    },
+    "accuracy": 0.945260347129506,
+    "macro avg": {
+      "precision": 0.8860370515734293,
+      "recall": 0.9216719120242206,
+      "f1-score": 0.902506468561995,
+      "support": 2996.0
+    },
+    "weighted avg": {
+      "precision": 0.9487007045477015,
+      "recall": 0.945260347129506,
+      "f1-score": 0.9464671098310082,
+      "support": 2996.0
+    }
+  },
+  "per_attack": {
+    "h5": {
+      "precision": 0.3888888888888889,
+      "recall": 0.8974358974358975,
+      "f1-score": 0.5426356589147286,
+      "support": 78.0
+    },
+    "h3": {
+      "precision": 0.42105263157894735,
+      "recall": 1.0,
+      "f1-score": 0.5925925925925926,
+      "support": 80.0
+    },
+    "h6": {
+      "precision": 0.3373493975903614,
+      "recall": 0.6829268292682927,
+      "f1-score": 0.45161290322580644,
+      "support": 82.0
+    },
+    "h4": {
+      "precision": 0.367816091954023,
+      "recall": 0.9142857142857143,
+      "f1-score": 0.5245901639344263,
+      "support": 70.0
+    },
+    "h1": {
+      "precision": 0.37142857142857144,
+      "recall": 0.8333333333333334,
+      "f1-score": 0.5138339920948617,
+      "support": 78.0
+    },
+    "h2": {
+      "precision": 0.4472361809045226,
+      "recall": 0.9888888888888889,
+      "f1-score": 0.615916955017301,
+      "support": 90.0
+    }
+  },
+  "auc_roc": 0.9707902266858535,
+  "confusion_matrix": [
+    [
+      2408,
+      110
+    ],
+    [
+      54,
+      424
+    ]
+  ],
+  "feature_cols": [
+    "mean",
+    "median",
+    "min",
+    "max",
+    "std",
+    "peak_to_avg_ratio",
+    "skewness",
+    "kurtosis",
+    "mean_abs_diff",
+    "zero_ratio",
+    "block_night",
+    "block_morning",
+    "block_afternoon",
+    "block_evening",
+    "h00_norm",
+    "h03_norm",
+    "h06_norm",
+    "h09_norm",
+    "h12_norm",
+    "h15_norm",
+    "h18_norm",
+    "h21_norm"
+  ],
+  "anomaly_precision": 0.794,
+  "anomaly_recall": 0.887,
+  "anomaly_f1": 0.8379,
+  "model": "xgboost",
+  "contamination": 0.15,
+  "label_ratio": 1.0,
+  "features": "hybrid",
+  "scope": "per-house"
+}

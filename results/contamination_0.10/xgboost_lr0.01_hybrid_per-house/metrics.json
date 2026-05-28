@@ -1,0 +1,110 @@
+{
+  "overall": {
+    "0": {
+      "precision": 0.9091823056300268,
+      "recall": 0.9974264705882353,
+      "f1-score": 0.9512622720897616,
+      "support": 2720.0
+    },
+    "1": {
+      "precision": 0.4166666666666667,
+      "recall": 0.018115942028985508,
+      "f1-score": 0.034722222222222224,
+      "support": 276.0
+    },
+    "accuracy": 0.9072096128170895,
+    "macro avg": {
+      "precision": 0.6629244861483468,
+      "recall": 0.5077712063086104,
+      "f1-score": 0.4929922471559919,
+      "support": 2996.0
+    },
+    "weighted avg": {
+      "precision": 0.8638103709324676,
+      "recall": 0.9072096128170895,
+      "f1-score": 0.8668280084838067,
+      "support": 2996.0
+    }
+  },
+  "per_attack": {
+    "h4": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1-score": 0.0,
+      "support": 49.0
+    },
+    "h2": {
+      "precision": 0.2222222222222222,
+      "recall": 0.0425531914893617,
+      "f1-score": 0.07142857142857142,
+      "support": 47.0
+    },
+    "h1": {
+      "precision": 0.125,
+      "recall": 0.02564102564102564,
+      "f1-score": 0.0425531914893617,
+      "support": 39.0
+    },
+    "h3": {
+      "precision": 0.2222222222222222,
+      "recall": 0.05405405405405406,
+      "f1-score": 0.08695652173913043,
+      "support": 37.0
+    },
+    "h6": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1-score": 0.0,
+      "support": 45.0
+    },
+    "h5": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1-score": 0.0,
+      "support": 59.0
+    }
+  },
+  "auc_roc": 0.6691289695225917,
+  "confusion_matrix": [
+    [
+      2713,
+      7
+    ],
+    [
+      271,
+      5
+    ]
+  ],
+  "feature_cols": [
+    "mean",
+    "median",
+    "min",
+    "max",
+    "std",
+    "peak_to_avg_ratio",
+    "skewness",
+    "kurtosis",
+    "mean_abs_diff",
+    "zero_ratio",
+    "block_night",
+    "block_morning",
+    "block_afternoon",
+    "block_evening",
+    "h00_norm",
+    "h03_norm",
+    "h06_norm",
+    "h09_norm",
+    "h12_norm",
+    "h15_norm",
+    "h18_norm",
+    "h21_norm"
+  ],
+  "anomaly_precision": 0.4167,
+  "anomaly_recall": 0.0181,
+  "anomaly_f1": 0.0347,
+  "model": "xgboost",
+  "contamination": 0.1,
+  "label_ratio": 0.01,
+  "features": "hybrid",
+  "scope": "per-house"
+}

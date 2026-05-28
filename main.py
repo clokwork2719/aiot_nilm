@@ -484,6 +484,125 @@ def cmd_compare(
     logging.info("=== compare complete. Results in %s ===", RESULTS_DIR)
 
 
+def cmd_benchmark(
+    features: str = "engineered",
+    contamination: float = 0.20,
+    repeats: int = 5,
+) -> None:
+    """Measure the deployment footprint of the per-house IForest detector.
+
+    Quantifies whether a per-meter IForest is light enough for edge/embedded
+    deployment by reporting, for a single trained house model:
+        - serialized model size (KB)
+        - per-window inference latency (microseconds)
+        - inference throughput (windows / second)
+    and the aggregate footprint across all houses.
+
+    Results are printed and saved to ``results/benchmark.json``.
+    """
+    import pickle
+    import time
+
+    import numpy as np
+    import pandas as pd
+
+    from src.data.attacks import inject_attacks
+    from src.features.feature_extractor import extract_features_from_df
+    from src.models.anomaly_detector import TheftDetector
+
+    if not WINDOWS_RAW_PATH.exists():
+        logging.error(
+            "Raw windows not found at %s. Run `prepare-data` (or `compare`) first.",
+            WINDOWS_RAW_PATH,
+        )
+        sys.exit(1)
+
+    logging.info("=== Edge-deployment benchmark [features=%s] ===", features)
+    windows_df = pd.read_parquet(WINDOWS_RAW_PATH)
+    attacked_df = inject_attacks(windows_df, contamination=contamination)
+    feat_df = extract_features_from_df(attacked_df, method=features)
+
+    feature_cols = [
+        c for c in feat_df.columns
+        if c not in {"house_id", "date", "label", "attacked", "pred_flag", "anomaly_score"}
+    ]
+    n_features = len(feature_cols)
+
+    houses = sorted(feat_df["house_id"].unique())
+    per_house_sizes_kb: list[float] = []
+    per_window_latencies_us: list[float] = []
+    n_windows_total = 0
+
+    # Train + measure one model per house
+    for house_id in houses:
+        house_feat = feat_df[feat_df["house_id"] == house_id]
+        if (house_feat["label"] == "normal").sum() < 10:
+            continue
+
+        det = TheftDetector(contamination=contamination)
+        det.train(house_feat)
+
+        # (a) serialized size
+        blob = pickle.dumps(det)
+        per_house_sizes_kb.append(len(blob) / 1024.0)
+
+        # (b) inference latency on this house's windows (median of `repeats`)
+        X = house_feat  # predict() expects the feature DataFrame
+        n_win = len(X)
+        n_windows_total += n_win
+        timings = []
+        for _ in range(repeats):
+            t0 = time.perf_counter()
+            det.predict(X)
+            timings.append(time.perf_counter() - t0)
+        best = min(timings)  # best-of to reduce noise
+        per_window_latencies_us.append(best / n_win * 1e6)
+
+    n_models = len(per_house_sizes_kb)
+    report = {
+        "features": features,
+        "n_features": n_features,
+        "contamination": contamination,
+        "n_house_models": n_models,
+        "model_size_kb": {
+            "mean": round(float(np.mean(per_house_sizes_kb)), 1),
+            "max": round(float(np.max(per_house_sizes_kb)), 1),
+            "total_all_houses": round(float(np.sum(per_house_sizes_kb)), 1),
+        },
+        "inference_latency_us_per_window": {
+            "mean": round(float(np.mean(per_window_latencies_us)), 2),
+            "max": round(float(np.max(per_window_latencies_us)), 2),
+        },
+        "throughput_windows_per_sec": round(
+            1e6 / float(np.mean(per_window_latencies_us)), 0
+        ),
+    }
+
+    RESULTS_DIR.mkdir(exist_ok=True)
+    out_path = RESULTS_DIR / "benchmark.json"
+    with open(out_path, "w") as f:
+        json.dump(report, f, indent=2)
+
+    # Pretty print
+    print("\n" + "=" * 56)
+    print(f"  Edge-Deployment Benchmark — features={features}")
+    print("=" * 56)
+    print(f"  Per-house IForest models trained : {n_models}")
+    print(f"  Feature dimensionality           : {n_features}")
+    print(f"  Model size  (mean / max / total) : "
+          f"{report['model_size_kb']['mean']} / "
+          f"{report['model_size_kb']['max']} / "
+          f"{report['model_size_kb']['total_all_houses']} KB")
+    print(f"  Inference latency  (mean / max)  : "
+          f"{report['inference_latency_us_per_window']['mean']} / "
+          f"{report['inference_latency_us_per_window']['max']} µs/window")
+    print(f"  Throughput (mean)                : "
+          f"{report['throughput_windows_per_sec']:.0f} windows/sec")
+    print("=" * 56)
+    print(f"  Saved → {out_path}\n")
+    logging.info("Benchmark complete.")
+
+
 def cmd_dashboard(features: str = "engineered", scope: str = "global", alert_filter: str = "attacks") -> None:
     """Phase 5: Launch Streamlit dashboard."""
     import subprocess
@@ -506,11 +625,12 @@ def cmd_dashboard(features: str = "engineered", scope: str = "global", alert_fil
 def _add_features_arg(parser) -> None:
     parser.add_argument(
         "--features",
-        choices=["engineered", "raw"],
+        choices=["engineered", "raw", "hybrid"],
         default="engineered",
         help=(
-            "Feature method: 'engineered' (14-dim, default) or "
-            "'raw' (26-dim normalised hourly + mean/std)."
+            "Feature method: 'engineered' (14-dim, default), "
+            "'raw' (26-dim normalised hourly + mean/std), or "
+            "'hybrid' (22-dim: 14 engineered + 8 sequence-preserving normalised hours)."
         ),
     )
 
@@ -594,6 +714,21 @@ def main() -> None:
     _add_features_arg(p_cmp)
     _add_scope_arg(p_cmp)
 
+    # benchmark
+    p_bench = sub.add_parser(
+        "benchmark",
+        help="Measure per-house IForest model size + inference latency (edge feasibility)",
+    )
+    _add_features_arg(p_bench)
+    p_bench.add_argument(
+        "--contamination", type=float, default=0.20,
+        help="Contamination used for the benchmark run (default: 0.20)",
+    )
+    p_bench.add_argument(
+        "--repeats", type=int, default=5,
+        help="Timing repeats per house (best-of is reported, default: 5)",
+    )
+
     # dashboard
     p_dash = sub.add_parser("dashboard", help="Launch Streamlit dashboard")
     _add_features_arg(p_dash)
@@ -626,6 +761,12 @@ def main() -> None:
             label_ratios=args.label_ratios,
             features=args.features,
             scope=args.scope,
+        )
+    elif args.command == "benchmark":
+        cmd_benchmark(
+            features=args.features,
+            contamination=args.contamination,
+            repeats=args.repeats,
         )
     elif args.command == "dashboard":
         cmd_dashboard(features=args.features, scope=args.scope, alert_filter=args.alert_filter)

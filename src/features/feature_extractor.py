@@ -85,8 +85,23 @@ FEATURE_NAMES_RAW: list[str] = [
     "raw_std",
 ]
 
+# Hybrid method: 14 engineered features + a sparse set of sequence-preserving
+# normalised hours.  Rationale (see docs/project_handbook.md §4.3):
+#   - engineered features dominate scale/flat-line attacks (h1, h4, h5)
+#   - but lose the hour-by-hour ordering, so they miss h6 (time reversal)
+#   - appending a few normalised hours re-introduces just enough sequence
+#     information to catch h6, without paying the full 24-dim raw cost that
+#     hurts h5 detection.
+# We sample every 3rd hour (8 anchors) so a reversal visibly reshuffles them.
+HYBRID_HOUR_IDX: list[int] = [0, 3, 6, 9, 12, 15, 18, 21]
+FEATURE_NAMES_HYBRID: list[str] = [
+    *FEATURE_NAMES,                                  # 14 engineered
+    *[f"h{i:02d}_norm" for i in HYBRID_HOUR_IDX],    # 8 sequence anchors
+]
+
 FEATURE_METHOD_ENGINEERED = "engineered"
 FEATURE_METHOD_RAW = "raw"
+FEATURE_METHOD_HYBRID = "hybrid"
 
 _EPS = 1e-9  # avoid divide-by-zero
 
@@ -194,6 +209,37 @@ def extract_raw_features(x: np.ndarray) -> np.ndarray:
 
 
 # ---------------------------------------------------------------------------
+# Hybrid feature extractor
+# ---------------------------------------------------------------------------
+
+
+def extract_hybrid_features(x: np.ndarray) -> np.ndarray:
+    """Return a 22-dimensional hybrid vector: 14 engineered + 8 normalised hours.
+
+    Combines the scale/shape sensitivity of the engineered features with a
+    sparse, sequence-preserving slice of the normalised 24-hour profile so that
+    ordering-based attacks (h6 time reversal) become detectable too.
+
+    Layout: [<14 engineered>, h00_norm, h03_norm, ..., h21_norm]  — shape (22,)
+    """
+    x = np.asarray(x, dtype=np.float64)
+    if x.shape != (24,):
+        raise ValueError(f"Expected shape (24,), got {x.shape}")
+
+    engineered = extract_daily_features(x)
+
+    raw_mean = np.mean(x)
+    raw_std = np.std(x)
+    if raw_std < _EPS:
+        x_norm = np.zeros(24, dtype=np.float64)
+    else:
+        x_norm = (x - raw_mean) / raw_std
+    anchors = x_norm[HYBRID_HOUR_IDX]
+
+    return np.concatenate([engineered, anchors])
+
+
+# ---------------------------------------------------------------------------
 # Batch extraction
 # ---------------------------------------------------------------------------
 
@@ -223,8 +269,13 @@ def extract_features_from_df(
     elif method == FEATURE_METHOD_ENGINEERED:
         extractor_fn = extract_daily_features
         feature_cols = FEATURE_NAMES
+    elif method == FEATURE_METHOD_HYBRID:
+        extractor_fn = extract_hybrid_features
+        feature_cols = FEATURE_NAMES_HYBRID
     else:
-        raise ValueError(f"Unknown feature method: {method!r}. Choose 'engineered' or 'raw'.")
+        raise ValueError(
+            f"Unknown feature method: {method!r}. Choose 'engineered', 'raw', or 'hybrid'."
+        )
 
     X = windows_df[HOUR_COLS].values  # (N, 24)
     features = np.apply_along_axis(extractor_fn, axis=1, arr=X)

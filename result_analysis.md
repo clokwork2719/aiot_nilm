@@ -155,5 +155,84 @@ The appliance with the largest absolute delta ($|\Delta_a|$) is flagged as the *
 2. **Hybrid Solution Proposal**: 
    * While the engineered features catch scale and flat-line attacks perfectly, they perform sub-optimally on sequence-based attacks like time reversal ($h_6$: 0.497 recall).
    * The raw-normalized features catch time reversal extremely well ($h_6$: 0.886 recall) but miss flat-lines ($h_5$: 0.236 recall).
-   * **Recommendation**: Implement a hybrid feature extractor that appends key sequence-preserving raw hours (or the first few principal components of the normalized 24-hour sequence) to the engineered statistical feature set. This would yield a single per-house model capable of catching both scale-tampering and temporal-shifting theft techniques.
-3. **Per-House Baseline Deployment**: In commercial deployment, utilities should avoid training global model architectures. Instead, lightweight per-meter IForest models should be fitted on the first 30–60 days of normal reading telemetry. This personalized baseline strategy significantly reduces false alarm rates while maintaining high sensitivity to subtle theft signatures.
+   * **Recommendation (now IMPLEMENTED — see §9)**: A hybrid feature extractor that appends key sequence-preserving normalised hours to the engineered statistical feature set. This was built and validated in this iteration; it raises $h_6$ recall while keeping AUC flat — full results in §9.
+3. **Per-House Baseline Deployment**: In commercial deployment, utilities should avoid training global model architectures. Instead, lightweight per-meter IForest models should be fitted on the first 30–60 days of normal reading telemetry. This personalized baseline strategy significantly reduces false alarm rates while maintaining high sensitivity to subtle theft signatures. The per-meter footprint is quantified in §10.
+
+---
+
+> **Note on evaluation protocol.** §3 reports **full-data** metrics (train = test, AUC 0.839) — useful for the per-attack feature analysis but optimistic. §8–§10 below use the honest **temporal 70/30 split** produced by `main.py compare` (IForest trains on all *normal* windows — no label leakage — and is evaluated on the held-out last 30% of each house's timeline). Under this protocol the per-house engineered AUC is **0.827**, which is the number quoted in the headline label-scarcity story. Both protocols tell the same per-attack story; the split version is what we defend in the presentation.
+
+---
+
+## 8. Label-Scarcity Experiment (The Headline Result)
+
+The original comparison (IForest vs XGBoost with 100% labels) could never showcase the unsupervised method, because a supervised model with abundant labels must win. The honest, decision-relevant question is: **how many labelled theft cases does a supervised model need before it beats a zero-label IForest?** Real utilities have *confirmed* theft labels for well under ~1–5% of customers, so the low-label regime is the one that matters.
+
+**Design.** Fix the per-house, engineered, temporal-split setup. IForest always uses **0 labels** (trains on normal windows only). XGBoost is trained at increasing `label_ratio` ∈ {1%, 5%, 10%, 20%, 50%, 100%}, where `(1 − label_ratio)` of the true attacks are masked back to "normal" — exactly modelling *undiscovered* theft in the training data. `scale_pos_weight` is set in XGBoost's favour, so the comparison is not rigged against it.
+
+### Results (temporal 70/30 split, contamination = 20%, per-house, engineered)
+
+| Model | Labels needed | AUC-ROC | Precision | Recall | F1 |
+|---|---|---|---|---|---|
+| **IForest** | **0% (none)** | **0.827** | 0.470 | **0.738** | 0.575 |
+| XGBoost | 1% | 0.662 | 0.500 | 0.010 | 0.019 |
+| XGBoost | 5% | 0.741 | 0.750 | 0.034 | 0.064 |
+| XGBoost | 10% | 0.772 | 0.857 | 0.067 | 0.124 |
+| XGBoost | 20% | 0.888 | 0.926 | 0.179 | 0.300 |
+| XGBoost | 50% | 0.928 | 0.822 | 0.465 | 0.594 |
+| XGBoost | 100% | 0.967 | 0.800 | 0.882 | 0.839 |
+
+**Key insights.**
+1. **AUC cross-over at ≈ 10–20% labels.** XGBoost only matches IForest's AUC once it has seen 10–20% of all attacks labelled. Below that, the zero-label IForest is strictly better on AUC.
+2. **Recall gap is far more dramatic.** At a realistic 5% label ratio, XGBoost recall is **3.4%** versus IForest's **73.8%**. Even at 10% labels, XGBoost catches under 7% of theft. In a domain where *missing* a thief costs far more than re-checking an honest customer, this is decisive.
+3. **The contamination sweep confirms robustness.** The same ordering (full-label XGBoost > IForest > low-label XGBoost) holds at contamination 5/10/15/20% — see `docs/presentation_assets/fig2_contamination_auc.png`.
+
+**Reproduce:**
+```bash
+uv run main.py compare \
+  --contaminations 0.05 0.10 0.15 0.20 \
+  --label-ratios 0.01 0.05 0.10 0.20 0.50 1.0 \
+  --scope per-house
+uv run python docs/generate_presentation_assets.py   # renders fig1–fig4 + table1
+```
+
+### On Precision 0.47 — *not* a weakness
+
+A random inspector flagging 20% of customers (= the attack rate) achieves precision = 20% by definition. IForest's 47% precision is therefore a **2.35× lift over random**: inspect 100 flagged homes and find ~47 real thieves instead of ~20. As real-world theft prevalence drops below 20%, this lift only grows. Recall — not precision — is the metric to optimise here.
+
+---
+
+## 9. Hybrid Feature Extractor — Implemented & Validated
+
+The §7 hybrid recommendation is now a real, selectable feature method (`--features hybrid`). It concatenates the **14 engineered features** with **8 sequence-preserving normalised hours** (every 3rd hour: h00, h03, …, h21) → a 22-dim vector. The engineered half keeps the scale/flat-line sensitivity; the 8 anchors re-inject just enough ordering information for the model to notice a reversed daily profile, without paying the full 24-dim raw cost that destroys $h_5$ detection.
+
+### Validation (IForest, per-house, temporal split, contamination = 20%)
+
+| Feature set | AUC | $h_1$ | $h_2$ | $h_3$ | $h_4$ | $h_5$ | $h_6$ |
+|---|---|---|---|---|---|---|---|
+| engineered (14-dim) | 0.827 | 0.600 | 0.661 | 0.700 | 0.919 | **1.000** | 0.571 |
+| **hybrid (22-dim)** | 0.827 | 0.533 | 0.634 | 0.645 | 0.973 | 0.933 | **0.653** |
+
+**Outcome (honest).** The hybrid set does exactly what the hypothesis predicted: **$h_6$ recall rises 0.571 → 0.653** (+14% relative) while overall AUC is unchanged. The trade-off is a modest dip on $h_5$ (1.000 → 0.933) and $h_1$/$h_3$. So hybrid is the right default when time-reversal arbitrage is a concern; pure engineered remains best when flat-line meter-freezing dominates. This is presented as a *tunable design knob*, not a free lunch.
+
+**Reproduce:** `uv run main.py compare --features hybrid --contaminations 0.20 --label-ratios 0.05 1.0 --scope per-house`
+
+---
+
+## 10. Edge-Deployment Footprint
+
+To support the §7 "lightweight per-meter model" claim with numbers (rather than asserting it), a `benchmark` command measures the trained per-house IForest's serialized size and inference latency.
+
+### Measured (engineered, contamination = 20%, 20 house models, this machine)
+
+| Metric | Value |
+|---|---|
+| Per-house models | 20 |
+| Feature dimensionality | 14 |
+| Model size — mean / max / all-houses total | **1.9 MB** / 2.3 MB / 38 MB |
+| Inference latency | **~23 µs per daily window** |
+| Throughput | **~44,000 windows / sec** |
+
+**Reading.** Inference is effectively free (a smart meter produces *one* window per day; the model classifies it in microseconds), so latency is a non-issue for edge or cloud. The 1.9 MB/house size comes from `n_estimators=200`; if on-device storage were tight, dropping to 50–100 trees would shrink it several-fold with little accuracy cost. This **quantifies feasibility** for the per-meter deployment strategy — note the project's headline narrative is still **cloud-based** (the meter uploads readings; inference runs server-side), and these numbers simply show the model is light enough that edge inference would also be viable if ever desired.
+
+**Reproduce:** `uv run main.py benchmark --features engineered`

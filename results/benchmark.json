@@ -1,0 +1,16 @@
+{
+  "features": "hybrid",
+  "n_features": 22,
+  "contamination": 0.2,
+  "n_house_models": 20,
+  "model_size_kb": {
+    "mean": 1882.3,
+    "max": 2125.9,
+    "total_all_houses": 37646.3
+  },
+  "inference_latency_us_per_window": {
+    "mean": 22.7,
+    "max": 27.57
+  },
+  "throughput_windows_per_sec": 44061.0
+}

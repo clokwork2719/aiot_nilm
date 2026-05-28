@@ -112,6 +112,7 @@ def load_comparison_results() -> list[dict]:
     if not RESULTS_DIR.exists():
         return []
     import json
+
     records = []
     for metrics_path in sorted(RESULTS_DIR.glob("*/*/metrics.json")):
         with open(metrics_path) as f:
@@ -185,10 +186,10 @@ with st.sidebar:
     houses = sorted(df_all["house_id"].unique().tolist())
     selected_house = st.selectbox("Select House", houses, index=0)
 
-    replay_speed = st.slider("Replay Speed (days/sec)", min_value=0.1, max_value=10.0, value=1.0, step=0.1)
+    # replay_speed = st.slider("Replay Speed (days/sec)", min_value=0.1, max_value=10.0, value=1.0, step=0.1)
     contamination_info = st.empty()
-    st.markdown("---")
-    st.caption(f"AIoT NILM • features: {feature_method} • scope: {scope} • alert-filter: {alert_filter}")
+    # st.markdown("---")
+    # st.caption(f"AIoT NILM • features: {feature_method} • scope: {scope} • alert-filter: {alert_filter}")
 
 
 # ---------------------------------------------------------------------------
@@ -205,18 +206,20 @@ contamination_info.metric("Anomaly Rate", f"{100 * n_flagged / max(n_total, 1):.
 # Tabs
 # ---------------------------------------------------------------------------
 
-tab_stream, tab_alert, tab_stats, tab_compare = st.tabs(
-    ["📡 Live Stream", "🔍 Alert Detail", "📊 Summary Stats", "⚖️ Model Comparison"]
-)
+# tab_stream, tab_alert, tab_stats, tab_compare = st.tabs(
+#     ["📡 Live Stream", "🔍 Alert Detail", "📊 Summary Stats", "⚖️ Model Comparison"]
+# )
+tab_stream, tab_alert, tab_compare = st.tabs(["📡 House Data", "🔍 Alert Detail", "⚖️ Model Comparison"])
 
 
 # ── Tab 1: Live Stream ──────────────────────────────────────────────────────
 with tab_stream:
-    st.subheader(f"House {selected_house} — Simulated Smart Meter Replay")
+    st.subheader(f"House {selected_house}")
 
-    col_run, col_reset = st.columns([1, 5])
-    run_replay = col_run.button("▶ Run Replay", key="btn_run")
-    col_reset.button("⏹ Stop / Reset", key="btn_stop")
+    # col_run, col_reset = st.columns([1, 5])
+    # run_replay = col_run.button("▶ Run Replay", key="btn_run")
+    run_replay = False
+    # col_reset.button("⏹ Stop / Reset", key="btn_stop")
 
     chart_placeholder = st.empty()
     status_placeholder = st.empty()
@@ -289,7 +292,7 @@ with tab_stream:
 
 # ── Tab 2: Alert Detail ─────────────────────────────────────────────────────
 with tab_alert:
-    st.subheader("Flagged Window — NILM Appliance Breakdown")
+    st.subheader("Flagged Window — Appliance Breakdown")
 
     if alert_filter == "attacks":
         flagged_df = df[(df["pred_flag"] == 1) & (df["attacked"] == True)].reset_index(drop=True)
@@ -332,11 +335,12 @@ with tab_alert:
         if dominant_app != "unknown":
             delta_val = explanation.appliance_delta[dominant_app]
             base_val = explanation.appliance_baseline[dominant_app]
-            rel_val = delta_val / (base_val + 1e-9)
+            rel_val = min(10, delta_val / (base_val + 1e-9))
             direction = "increase" if delta_val > 0 else "reduction"
+            rel_val = abs(round(rel_val * 100, 2)) if rel_val != 10 else "1000+"
             st.warning(
                 f"⚠️ **Explainability Insights**: **{dominant_app}** is flagged as the dominant anomaly, "
-                f"showing the largest relative deviation from its historical baseline (a {direction} of **{abs(rel_val) * 100:.1f}%** or **{abs(delta_val):.3f} kWh**)."
+                f"showing the largest relative deviation from its historical baseline (a {direction} of **{rel_val}%** or **{abs(delta_val):.3f} kWh**)."
             )
 
         # Hourly profile
@@ -374,87 +378,87 @@ with tab_alert:
 
 
 # ── Tab 3: Summary Stats ────────────────────────────────────────────────────
-with tab_stats:
-    st.subheader("Detection Metrics Across All Houses")
+# with tab_stats:
+#     st.subheader("Detection Metrics Across All Houses")
 
-    metrics = load_metrics(feature_method, scope)
-    if metrics is None:
-        st.info("No metrics file found. Run `uv run main.py train` first.")
-    else:
-        col_a, col_b, col_c, col_d = st.columns(4)
-        overall = metrics.get("overall", {})
-        macro = overall.get("macro avg", {})
-        col_a.metric("AUC-ROC", f"{metrics.get('auc_roc', 0):.3f}")
-        col_b.metric("Precision (macro)", f"{macro.get('precision', 0):.3f}")
-        col_c.metric("Recall (macro)", f"{macro.get('recall', 0):.3f}")
-        col_d.metric("F1 (macro)", f"{macro.get('f1-score', 0):.3f}")
+#     metrics = load_metrics(feature_method, scope)
+#     if metrics is None:
+#         st.info("No metrics file found. Run `uv run main.py train` first.")
+#     else:
+#         col_a, col_b, col_c, col_d = st.columns(4)
+#         overall = metrics.get("overall", {})
+#         macro = overall.get("macro avg", {})
+#         col_a.metric("AUC-ROC", f"{metrics.get('auc_roc', 0):.3f}")
+#         col_b.metric("Precision (macro)", f"{macro.get('precision', 0):.3f}")
+#         col_c.metric("Recall (macro)", f"{macro.get('recall', 0):.3f}")
+#         col_d.metric("F1 (macro)", f"{macro.get('f1-score', 0):.3f}")
 
-        st.markdown("### Per-Attack-Type Breakdown")
-        per_attack = metrics.get("per_attack", {})
-        if per_attack:
-            rows = []
-            for attack, m in sorted(per_attack.items()):
-                rows.append(
-                    {
-                        "Attack": attack,
-                        "Precision": round(m.get("precision", 0), 3),
-                        "Recall": round(m.get("recall", 0), 3),
-                        "F1": round(m.get("f1-score", 0), 3),
-                        "Support": int(m.get("support", 0)),
-                    }
-                )
-            st.dataframe(pd.DataFrame(rows).set_index("Attack"), width="stretch")
+#         st.markdown("### Per-Attack-Type Breakdown")
+#         per_attack = metrics.get("per_attack", {})
+#         if per_attack:
+#             rows = []
+#             for attack, m in sorted(per_attack.items()):
+#                 rows.append(
+#                     {
+#                         "Attack": attack,
+#                         "Precision": round(m.get("precision", 0), 3),
+#                         "Recall": round(m.get("recall", 0), 3),
+#                         "F1": round(m.get("f1-score", 0), 3),
+#                         "Support": int(m.get("support", 0)),
+#                     }
+#                 )
+#             st.dataframe(pd.DataFrame(rows).set_index("Attack"), width="stretch")
 
-            # Radar chart
-            attacks = [r["Attack"] for r in rows]
-            fig_radar = go.Figure()
-            for metric_name, color in [
-                ("Precision", "#4cc9f0"),
-                ("Recall", "#f72585"),
-                ("F1", "#7b2d8b"),
-            ]:
-                vals = [r[metric_name] for r in rows] + [rows[0][metric_name]]
-                fig_radar.add_trace(
-                    go.Scatterpolar(
-                        r=vals,
-                        theta=attacks + [attacks[0]],
-                        mode="lines+markers",
-                        name=metric_name,
-                        line_color=color,
-                    )
-                )
-            fig_radar.update_layout(
-                polar=dict(
-                    bgcolor="#0f0f1a",
-                    radialaxis=dict(visible=True, range=[0, 1], gridcolor="#2e2e4e"),
-                    angularaxis=dict(gridcolor="#2e2e4e"),
-                ),
-                paper_bgcolor="#0f0f1a",
-                font_color="#e0e0e0",
-                showlegend=True,
-                legend=dict(orientation="h"),
-                title="Per-Attack Detection Metrics",
-            )
-            st.plotly_chart(fig_radar, width="stretch")
+#             # Radar chart
+#             attacks = [r["Attack"] for r in rows]
+#             fig_radar = go.Figure()
+#             for metric_name, color in [
+#                 ("Precision", "#4cc9f0"),
+#                 ("Recall", "#f72585"),
+#                 ("F1", "#7b2d8b"),
+#             ]:
+#                 vals = [r[metric_name] for r in rows] + [rows[0][metric_name]]
+#                 fig_radar.add_trace(
+#                     go.Scatterpolar(
+#                         r=vals,
+#                         theta=attacks + [attacks[0]],
+#                         mode="lines+markers",
+#                         name=metric_name,
+#                         line_color=color,
+#                     )
+#                 )
+#             fig_radar.update_layout(
+#                 polar=dict(
+#                     bgcolor="#0f0f1a",
+#                     radialaxis=dict(visible=True, range=[0, 1], gridcolor="#2e2e4e"),
+#                     angularaxis=dict(gridcolor="#2e2e4e"),
+#                 ),
+#                 paper_bgcolor="#0f0f1a",
+#                 font_color="#e0e0e0",
+#                 showlegend=True,
+#                 legend=dict(orientation="h"),
+#                 title="Per-Attack Detection Metrics",
+#             )
+#             st.plotly_chart(fig_radar, width="stretch")
 
-    st.markdown("### Attack Type Distribution (This House)")
-    label_counts = df["label"].value_counts().reset_index()
-    label_counts.columns = ["Label", "Count"]
-    fig_dist = px.bar(
-        label_counts,
-        x="Label",
-        y="Count",
-        color="Label",
-        color_discrete_sequence=px.colors.qualitative.Vivid,
-        title="Label Distribution",
-    )
-    fig_dist.update_layout(
-        paper_bgcolor="#0f0f1a",
-        plot_bgcolor="#0f0f1a",
-        font_color="#e0e0e0",
-        showlegend=False,
-    )
-    st.plotly_chart(fig_dist, width="stretch")
+#     st.markdown("### Attack Type Distribution (This House)")
+#     label_counts = df["label"].value_counts().reset_index()
+#     label_counts.columns = ["Label", "Count"]
+#     fig_dist = px.bar(
+#         label_counts,
+#         x="Label",
+#         y="Count",
+#         color="Label",
+#         color_discrete_sequence=px.colors.qualitative.Vivid,
+#         title="Label Distribution",
+#     )
+#     fig_dist.update_layout(
+#         paper_bgcolor="#0f0f1a",
+#         plot_bgcolor="#0f0f1a",
+#         font_color="#e0e0e0",
+#         showlegend=False,
+#     )
+#     st.plotly_chart(fig_dist, width="stretch")
 
 
 # ── Tab 4: Model Comparison ─────────────────────────────────────────────────
@@ -472,15 +476,15 @@ with tab_compare:
         )
     else:
         cmp_df = pd.DataFrame(records)
-        cmp_df["auc_roc"]      = cmp_df["auc_roc"].astype(float)
+        cmp_df["auc_roc"] = cmp_df["auc_roc"].astype(float)
         cmp_df["contamination"] = cmp_df["contamination"].astype(float)
-        cmp_df["label_ratio"]  = cmp_df["label_ratio"].astype(float)
+        cmp_df["label_ratio"] = cmp_df["label_ratio"].astype(float)
 
         # Ensure anomaly_* columns (top-level since new code, fallback for old files)
         for col, key in [
             ("anomaly_precision", "precision"),
-            ("anomaly_recall",    "recall"),
-            ("anomaly_f1",        "f1-score"),
+            ("anomaly_recall", "recall"),
+            ("anomaly_f1", "f1-score"),
         ]:
             if col not in cmp_df.columns:
                 cmp_df[col] = cmp_df["overall"].apply(
@@ -504,9 +508,7 @@ with tab_compare:
             key="cmp_scope",
         )
 
-        filtered = cmp_df[
-            (cmp_df["features"] == sel_features) & (cmp_df["scope"] == sel_scope)
-        ].copy()
+        filtered = cmp_df[(cmp_df["features"] == sel_features) & (cmp_df["scope"] == sel_scope)].copy()
 
         if filtered.empty:
             st.warning("No results for this combination.")
@@ -523,10 +525,10 @@ with tab_compare:
                 key="cmp_cont",
             )
 
-            cont_data   = filtered[filtered["contamination"] == sel_cont]
+            cont_data = filtered[filtered["contamination"] == sel_cont]
             iforest_row = cont_data[cont_data["model"] == "iforest"]
-            xgb_data    = cont_data[cont_data["model"] == "xgboost"].sort_values("label_ratio")
-            x_lrs       = xgb_data["label_ratio"].tolist()
+            xgb_data = cont_data[cont_data["model"] == "xgboost"].sort_values("label_ratio")
+            x_lrs = xgb_data["label_ratio"].tolist()
 
             st.caption(
                 f"Contamination = **{sel_cont:.0%}**  |  "
@@ -537,20 +539,19 @@ with tab_compare:
             # ── IForest at-a-glance cards ────────────────────────────────────
             if not iforest_row.empty:
                 ir = iforest_row.iloc[0]
-                if_prec  = float(ir.get("anomaly_precision", 0))
-                if_rec   = float(ir.get("anomaly_recall", 0))
-                if_auc   = float(ir.get("auc_roc", 0))
-                if_lift  = if_prec / max(sel_cont, 1e-9)
+                if_prec = float(ir.get("anomaly_precision", 0))
+                if_rec = float(ir.get("anomaly_recall", 0))
+                if_auc = float(ir.get("auc_roc", 0))
+                if_lift = if_prec / max(sel_cont, 1e-9)
                 random_prec = sel_cont  # precision of a random detector = attack rate
 
-                st.markdown("#### IForest Performance (0 labels required)")
+                st.markdown("#### IForest Performance")
                 mc1, mc2, mc3, mc4 = st.columns(4)
-                mc1.metric("Precision", f"{if_prec:.1%}",
-                           help="Of all flagged windows, how many are real attacks?")
-                mc2.metric("Recall", f"{if_rec:.1%}",
-                           help="Of all real attacks, how many were caught?")
-                mc3.metric("AUC-ROC", f"{if_auc:.3f}",
-                           help="Overall discriminative ability (1.0 = perfect, 0.5 = random)")
+                mc1.metric("Precision", f"{if_prec:.1%}", help="Of all flagged windows, how many are real attacks?")
+                mc2.metric("Recall", f"{if_rec:.1%}", help="Of all real attacks, how many were caught?")
+                mc3.metric(
+                    "AUC-ROC", f"{if_auc:.3f}", help="Overall discriminative ability (1.0 = perfect, 0.5 = random)"
+                )
                 mc4.metric(
                     "Lift vs Random",
                     f"{if_lift:.2f}×",
@@ -581,35 +582,40 @@ with tab_compare:
                 legend=dict(orientation="h", yanchor="bottom", y=1.02),
             )
 
-            def _metric_fig(title: str, y_label: str, col: str,
-                            random_ref: float | None = None) -> go.Figure:
+            def _metric_fig(title: str, y_label: str, col: str, random_ref: float | None = None) -> go.Figure:
                 fig = go.Figure()
                 if not xgb_data.empty and col in xgb_data.columns:
-                    fig.add_trace(go.Scatter(
-                        x=x_lrs,
-                        y=xgb_data[col].tolist(),
-                        mode="lines+markers",
-                        name="XGBoost",
-                        line=dict(color=model_colors["xgboost"], width=2),
-                        marker=dict(size=8),
-                    ))
+                    fig.add_trace(
+                        go.Scatter(
+                            x=x_lrs,
+                            y=xgb_data[col].tolist(),
+                            mode="lines+markers",
+                            name="XGBoost",
+                            line=dict(color=model_colors["xgboost"], width=2),
+                            marker=dict(size=8),
+                        )
+                    )
                 if not iforest_row.empty and col in iforest_row.columns and x_lrs:
                     val = float(iforest_row[col].iloc[0])
-                    fig.add_trace(go.Scatter(
-                        x=[x_lrs[0], x_lrs[-1]],
-                        y=[val, val],
-                        mode="lines",
-                        name="IForest (0 labels)",
-                        line=dict(color=model_colors["iforest"], width=2, dash="dash"),
-                    ))
+                    fig.add_trace(
+                        go.Scatter(
+                            x=[x_lrs[0], x_lrs[-1]],
+                            y=[val, val],
+                            mode="lines",
+                            name="IForest (0 labels)",
+                            line=dict(color=model_colors["iforest"], width=2, dash="dash"),
+                        )
+                    )
                 if random_ref is not None and x_lrs:
-                    fig.add_trace(go.Scatter(
-                        x=[x_lrs[0], x_lrs[-1]],
-                        y=[random_ref, random_ref],
-                        mode="lines",
-                        name="Random baseline",
-                        line=dict(color="#888888", width=1.5, dash="dot"),
-                    ))
+                    fig.add_trace(
+                        go.Scatter(
+                            x=[x_lrs[0], x_lrs[-1]],
+                            y=[random_ref, random_ref],
+                            mode="lines",
+                            name="Random baseline",
+                            line=dict(color="#888888", width=1.5, dash="dot"),
+                        )
+                    )
                 fig.update_layout(
                     title=title,
                     yaxis=dict(title=y_label, range=[0, 1], gridcolor="#1e1e2e"),
@@ -619,21 +625,20 @@ with tab_compare:
 
             col1, col2 = st.columns(2)
             col1.plotly_chart(
-                _metric_fig("AUC-ROC vs Label Availability",  "AUC-ROC",  "auc_roc"),
+                _metric_fig("AUC-ROC vs Label Availability", "AUC-ROC", "auc_roc"),
                 use_container_width=True,
             )
             col2.plotly_chart(
-                _metric_fig("Recall vs Label Availability",   "Recall",   "anomaly_recall"),
+                _metric_fig("Recall vs Label Availability", "Recall", "anomaly_recall"),
                 use_container_width=True,
             )
             col3, col4 = st.columns(2)
             col3.plotly_chart(
-                _metric_fig("Precision vs Label Availability", "Precision", "anomaly_precision",
-                            random_ref=sel_cont),
+                _metric_fig("Precision vs Label Availability", "Precision", "anomaly_precision", random_ref=sel_cont),
                 use_container_width=True,
             )
             col4.plotly_chart(
-                _metric_fig("F1 vs Label Availability",        "F1",        "anomaly_f1"),
+                _metric_fig("F1 vs Label Availability", "F1", "anomaly_f1"),
                 use_container_width=True,
             )
 
@@ -655,46 +660,68 @@ with tab_compare:
                 if not iforest_row.empty:
                     pa_if = iforest_row.iloc[0].get("per_attack", {})
                     if isinstance(pa_if, dict):
-                        fig_pa.add_trace(go.Bar(
-                            name="IForest (0 labels)",
-                            x=attack_types,
-                            y=[pa_if.get(a, {}).get("recall", 0) for a in attack_types],
-                            marker_color=model_colors["iforest"],
-                        ))
+                        fig_pa.add_trace(
+                            go.Bar(
+                                name="IForest (0 labels)",
+                                x=attack_types,
+                                y=[pa_if.get(a, {}).get("recall", 0) for a in attack_types],
+                                marker_color=model_colors["iforest"],
+                            )
+                        )
 
                 if not xgb_sel.empty:
                     pa_xgb = xgb_sel.iloc[0].get("per_attack", {})
                     if isinstance(pa_xgb, dict):
-                        fig_pa.add_trace(go.Bar(
-                            name=f"XGBoost (lr={sel_lr:.0%})",
-                            x=attack_types,
-                            y=[pa_xgb.get(a, {}).get("recall", 0) for a in attack_types],
-                            marker_color=model_colors["xgboost"],
-                        ))
+                        fig_pa.add_trace(
+                            go.Bar(
+                                name=f"XGBoost (lr={sel_lr:.0%})",
+                                x=attack_types,
+                                y=[pa_xgb.get(a, {}).get("recall", 0) for a in attack_types],
+                                marker_color=model_colors["xgboost"],
+                            )
+                        )
 
                 fig_pa.update_layout(
                     barmode="group",
                     title=f"Per-Attack Recall — contamination={sel_cont:.0%}, XGBoost lr={sel_lr:.0%}",
                     xaxis=dict(title="Attack Type", gridcolor="#1e1e2e"),
                     yaxis=dict(title="Recall", range=[0, 1], gridcolor="#1e1e2e"),
-                    paper_bgcolor="#0f0f1a", plot_bgcolor="#0f0f1a", font_color="#e0e0e0",
+                    paper_bgcolor="#0f0f1a",
+                    plot_bgcolor="#0f0f1a",
+                    font_color="#e0e0e0",
                     legend=dict(orientation="h", yanchor="bottom", y=1.02),
                 )
                 st.plotly_chart(fig_pa, use_container_width=True)
 
             # ── Summary table for selected contamination ─────────────────────
             st.markdown("### Results at Selected Contamination")
-            disp_cols = [c for c in ["model", "label_ratio", "auc_roc",
-                                      "anomaly_precision", "anomaly_recall", "anomaly_f1", "lift"]
-                         if c in cont_data.columns]
+            disp_cols = [
+                c
+                for c in [
+                    "model",
+                    "label_ratio",
+                    "auc_roc",
+                    "anomaly_precision",
+                    "anomaly_recall",
+                    "anomaly_f1",
+                    "lift",
+                ]
+                if c in cont_data.columns
+            ]
             rename_map = {
-                "auc_roc": "AUC-ROC", "label_ratio": "Label Ratio",
-                "anomaly_precision": "Precision", "anomaly_recall": "Recall",
-                "anomaly_f1": "F1", "lift": "Lift vs Random",
+                "auc_roc": "AUC-ROC",
+                "label_ratio": "Label Ratio",
+                "anomaly_precision": "Precision",
+                "anomaly_recall": "Recall",
+                "anomaly_f1": "F1",
+                "lift": "Lift vs Random",
             }
             fmt = {
-                "AUC-ROC": "{:.3f}", "Label Ratio": "{:.2f}",
-                "Precision": "{:.3f}", "Recall": "{:.3f}", "F1": "{:.3f}",
+                "AUC-ROC": "{:.3f}",
+                "Label Ratio": "{:.2f}",
+                "Precision": "{:.3f}",
+                "Recall": "{:.3f}",
+                "F1": "{:.3f}",
                 "Lift vs Random": "{:.2f}×",
             }
             st.dataframe(

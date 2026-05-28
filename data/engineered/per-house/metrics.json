@@ -1,0 +1,94 @@
+{
+  "overall": {
+    "0": {
+      "precision": 0.9251779747203255,
+      "recall": 0.7996986060529951,
+      "f1-score": 0.8578741748619156,
+      "support": 7963.0
+    },
+    "1": {
+      "precision": 0.4806252035167698,
+      "recall": 0.7413360120542442,
+      "f1-score": 0.5831687080205452,
+      "support": 1991.0
+    },
+    "accuracy": 0.788024914607193,
+    "macro avg": {
+      "precision": 0.7029015891185476,
+      "recall": 0.7705173090536197,
+      "f1-score": 0.7205214414412304,
+      "support": 9954.0
+    },
+    "weighted avg": {
+      "precision": 0.8362584883363312,
+      "recall": 0.788024914607193,
+      "f1-score": 0.8029275619946091,
+      "support": 9954.0
+    }
+  },
+  "per_attack": {
+    "h6": {
+      "precision": 0.09168564920273349,
+      "recall": 0.49691358024691357,
+      "f1-score": 0.1548076923076923,
+      "support": 324.0
+    },
+    "h2": {
+      "precision": 0.11829740187949143,
+      "recall": 0.6131805157593123,
+      "f1-score": 0.19833178869323448,
+      "support": 349.0
+    },
+    "h3": {
+      "precision": 0.1331521739130435,
+      "recall": 0.7446808510638298,
+      "f1-score": 0.22591055786076533,
+      "support": 329.0
+    },
+    "h1": {
+      "precision": 0.12217941662080352,
+      "recall": 0.6626865671641791,
+      "f1-score": 0.20631970260223048,
+      "support": 335.0
+    },
+    "h5": {
+      "precision": 0.16927083333333334,
+      "recall": 0.9969325153374233,
+      "f1-score": 0.2894033837934105,
+      "support": 326.0
+    },
+    "h4": {
+      "precision": 0.16228991596638656,
+      "recall": 0.9420731707317073,
+      "f1-score": 0.2768817204301075,
+      "support": 328.0
+    }
+  },
+  "auc_roc": 0.8392709109869207,
+  "confusion_matrix": [
+    [
+      6368,
+      1595
+    ],
+    [
+      515,
+      1476
+    ]
+  ],
+  "feature_cols": [
+    "mean",
+    "median",
+    "min",
+    "max",
+    "std",
+    "peak_to_avg_ratio",
+    "skewness",
+    "kurtosis",
+    "mean_abs_diff",
+    "zero_ratio",
+    "block_night",
+    "block_morning",
+    "block_afternoon",
+    "block_evening"
+  ]
+}

@@ -488,6 +488,9 @@ with tab_compare:
                 )
             cmp_df[col] = cmp_df[col].astype(float)
 
+        # Lift = precision / random_baseline (random baseline = attack rate = contamination)
+        cmp_df["lift"] = (cmp_df["anomaly_precision"] / cmp_df["contamination"].clip(lower=1e-9)).round(2)
+
         # ── Selectors ───────────────────────────────────────────────────────
         col_f, col_s = st.columns(2)
         sel_features = col_f.selectbox(
@@ -531,6 +534,40 @@ with tab_compare:
                 "XGBoost curve shows performance as labeled attack data increases."
             )
 
+            # ── IForest at-a-glance cards ────────────────────────────────────
+            if not iforest_row.empty:
+                ir = iforest_row.iloc[0]
+                if_prec  = float(ir.get("anomaly_precision", 0))
+                if_rec   = float(ir.get("anomaly_recall", 0))
+                if_auc   = float(ir.get("auc_roc", 0))
+                if_lift  = if_prec / max(sel_cont, 1e-9)
+                random_prec = sel_cont  # precision of a random detector = attack rate
+
+                st.markdown("#### IForest Performance (0 labels required)")
+                mc1, mc2, mc3, mc4 = st.columns(4)
+                mc1.metric("Precision", f"{if_prec:.1%}",
+                           help="Of all flagged windows, how many are real attacks?")
+                mc2.metric("Recall", f"{if_rec:.1%}",
+                           help="Of all real attacks, how many were caught?")
+                mc3.metric("AUC-ROC", f"{if_auc:.3f}",
+                           help="Overall discriminative ability (1.0 = perfect, 0.5 = random)")
+                mc4.metric(
+                    "Lift vs Random",
+                    f"{if_lift:.2f}×",
+                    delta=f"{if_lift - 1:.2f}× above random",
+                    help=(
+                        f"Random inspection at {sel_cont:.0%} attack rate gives precision = {random_prec:.0%}. "
+                        f"IForest achieves {if_prec:.0%} — {if_lift:.2f}× more efficient."
+                    ),
+                )
+                st.caption(
+                    f"A random inspector flagging {sel_cont:.0%} of customers would achieve "
+                    f"precision = **{random_prec:.0%}** and recall ≈ **{sel_cont:.0%}**. "
+                    f"IForest achieves **{if_prec:.0%}** precision and **{if_rec:.0%}** recall "
+                    f"— with **zero labeled attack data**."
+                )
+                st.markdown("---")
+
             # ── 4 metric charts ─────────────────────────────────────────────
             _chart_layout = dict(
                 xaxis=dict(
@@ -544,7 +581,8 @@ with tab_compare:
                 legend=dict(orientation="h", yanchor="bottom", y=1.02),
             )
 
-            def _metric_fig(title: str, y_label: str, col: str) -> go.Figure:
+            def _metric_fig(title: str, y_label: str, col: str,
+                            random_ref: float | None = None) -> go.Figure:
                 fig = go.Figure()
                 if not xgb_data.empty and col in xgb_data.columns:
                     fig.add_trace(go.Scatter(
@@ -564,6 +602,14 @@ with tab_compare:
                         name="IForest (0 labels)",
                         line=dict(color=model_colors["iforest"], width=2, dash="dash"),
                     ))
+                if random_ref is not None and x_lrs:
+                    fig.add_trace(go.Scatter(
+                        x=[x_lrs[0], x_lrs[-1]],
+                        y=[random_ref, random_ref],
+                        mode="lines",
+                        name="Random baseline",
+                        line=dict(color="#888888", width=1.5, dash="dot"),
+                    ))
                 fig.update_layout(
                     title=title,
                     yaxis=dict(title=y_label, range=[0, 1], gridcolor="#1e1e2e"),
@@ -582,7 +628,8 @@ with tab_compare:
             )
             col3, col4 = st.columns(2)
             col3.plotly_chart(
-                _metric_fig("Precision vs Label Availability", "Precision", "anomaly_precision"),
+                _metric_fig("Precision vs Label Availability", "Precision", "anomaly_precision",
+                            random_ref=sel_cont),
                 use_container_width=True,
             )
             col4.plotly_chart(
@@ -638,15 +685,17 @@ with tab_compare:
             # ── Summary table for selected contamination ─────────────────────
             st.markdown("### Results at Selected Contamination")
             disp_cols = [c for c in ["model", "label_ratio", "auc_roc",
-                                      "anomaly_precision", "anomaly_recall", "anomaly_f1"]
+                                      "anomaly_precision", "anomaly_recall", "anomaly_f1", "lift"]
                          if c in cont_data.columns]
             rename_map = {
                 "auc_roc": "AUC-ROC", "label_ratio": "Label Ratio",
-                "anomaly_precision": "Precision", "anomaly_recall": "Recall", "anomaly_f1": "F1",
+                "anomaly_precision": "Precision", "anomaly_recall": "Recall",
+                "anomaly_f1": "F1", "lift": "Lift vs Random",
             }
             fmt = {
                 "AUC-ROC": "{:.3f}", "Label Ratio": "{:.2f}",
                 "Precision": "{:.3f}", "Recall": "{:.3f}", "F1": "{:.3f}",
+                "Lift vs Random": "{:.2f}×",
             }
             st.dataframe(
                 cont_data[disp_cols].rename(columns=rename_map).style.format(fmt),

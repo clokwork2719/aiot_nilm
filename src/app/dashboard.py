@@ -46,6 +46,7 @@ st.set_page_config(
 )
 
 BASE_DATA_DIR = Path(__file__).parent.parent.parent / "data"
+RESULTS_DIR = Path(__file__).parent.parent.parent / "results"
 
 # Feature method and scope: read from CLI args passed via `streamlit run -- --features=raw --scope=per-house`
 _cli_features = "engineered"
@@ -104,6 +105,19 @@ def get_explainer(df_all: pd.DataFrame) -> NilmExplainer:
 def make_hour_trace(row: pd.Series) -> list[float]:
     """Extract the 24 hourly readings from a result row."""
     return [row[f"h{i:02d}"] for i in range(24)]
+
+
+def load_comparison_results() -> list[dict]:
+    """Scan results/ directory and return all metrics.json as a flat list (no cache)."""
+    if not RESULTS_DIR.exists():
+        return []
+    import json
+    records = []
+    for metrics_path in sorted(RESULTS_DIR.glob("*/*/metrics.json")):
+        with open(metrics_path) as f:
+            m = json.load(f)
+        records.append(m)
+    return records
 
 
 def make_appliance_bar(explanation_dict: dict, label: str) -> go.Figure:
@@ -191,7 +205,9 @@ contamination_info.metric("Anomaly Rate", f"{100 * n_flagged / max(n_total, 1):.
 # Tabs
 # ---------------------------------------------------------------------------
 
-tab_stream, tab_alert, tab_stats = st.tabs(["📡 Live Stream", "🔍 Alert Detail", "📊 Summary Stats"])
+tab_stream, tab_alert, tab_stats, tab_compare = st.tabs(
+    ["📡 Live Stream", "🔍 Alert Detail", "📊 Summary Stats", "⚖️ Model Comparison"]
+)
 
 
 # ── Tab 1: Live Stream ──────────────────────────────────────────────────────
@@ -439,3 +455,200 @@ with tab_stats:
         showlegend=False,
     )
     st.plotly_chart(fig_dist, width="stretch")
+
+
+# ── Tab 4: Model Comparison ─────────────────────────────────────────────────
+with tab_compare:
+    st.subheader("IForest vs XGBoost — Label Scarcity Analysis")
+
+    records = load_comparison_results()
+
+    if not records:
+        st.info(
+            "No comparison results found. Run:\n\n"
+            "```\nuv run main.py compare "
+            "--contaminations 0.05 0.10 0.15 0.20 "
+            "--label-ratios 0.01 0.05 0.10 0.20 0.50 1.0\n```"
+        )
+    else:
+        cmp_df = pd.DataFrame(records)
+        cmp_df["auc_roc"]      = cmp_df["auc_roc"].astype(float)
+        cmp_df["contamination"] = cmp_df["contamination"].astype(float)
+        cmp_df["label_ratio"]  = cmp_df["label_ratio"].astype(float)
+
+        # Ensure anomaly_* columns (top-level since new code, fallback for old files)
+        for col, key in [
+            ("anomaly_precision", "precision"),
+            ("anomaly_recall",    "recall"),
+            ("anomaly_f1",        "f1-score"),
+        ]:
+            if col not in cmp_df.columns:
+                cmp_df[col] = cmp_df["overall"].apply(
+                    lambda o, k=key: o.get("1", {}).get(k, 0) if isinstance(o, dict) else 0
+                )
+            cmp_df[col] = cmp_df[col].astype(float)
+
+        # ── Selectors ───────────────────────────────────────────────────────
+        col_f, col_s = st.columns(2)
+        sel_features = col_f.selectbox(
+            "Feature Method",
+            sorted(cmp_df["features"].unique().tolist()),
+            key="cmp_feat",
+        )
+        sel_scope = col_s.selectbox(
+            "Scope",
+            sorted(cmp_df["scope"].unique().tolist()),
+            key="cmp_scope",
+        )
+
+        filtered = cmp_df[
+            (cmp_df["features"] == sel_features) & (cmp_df["scope"] == sel_scope)
+        ].copy()
+
+        if filtered.empty:
+            st.warning("No results for this combination.")
+        else:
+            model_colors = {"iforest": "#4cc9f0", "xgboost": "#f72585"}
+
+            # ── Contamination slider ────────────────────────────────────────
+            available_conts = sorted(filtered["contamination"].unique().tolist())
+            sel_cont = st.select_slider(
+                "Contamination Rate",
+                options=available_conts,
+                value=available_conts[-1],
+                format_func=lambda v: f"{v:.0%}",
+                key="cmp_cont",
+            )
+
+            cont_data   = filtered[filtered["contamination"] == sel_cont]
+            iforest_row = cont_data[cont_data["model"] == "iforest"]
+            xgb_data    = cont_data[cont_data["model"] == "xgboost"].sort_values("label_ratio")
+            x_lrs       = xgb_data["label_ratio"].tolist()
+
+            st.caption(
+                f"Contamination = **{sel_cont:.0%}**  |  "
+                "IForest uses **0 labels** (dashed).  "
+                "XGBoost curve shows performance as labeled attack data increases."
+            )
+
+            # ── 4 metric charts ─────────────────────────────────────────────
+            _chart_layout = dict(
+                xaxis=dict(
+                    title="Fraction of Attack Labels Given to XGBoost",
+                    tickformat=".0%",
+                    gridcolor="#1e1e2e",
+                ),
+                paper_bgcolor="#0f0f1a",
+                plot_bgcolor="#0f0f1a",
+                font_color="#e0e0e0",
+                legend=dict(orientation="h", yanchor="bottom", y=1.02),
+            )
+
+            def _metric_fig(title: str, y_label: str, col: str) -> go.Figure:
+                fig = go.Figure()
+                if not xgb_data.empty and col in xgb_data.columns:
+                    fig.add_trace(go.Scatter(
+                        x=x_lrs,
+                        y=xgb_data[col].tolist(),
+                        mode="lines+markers",
+                        name="XGBoost",
+                        line=dict(color=model_colors["xgboost"], width=2),
+                        marker=dict(size=8),
+                    ))
+                if not iforest_row.empty and col in iforest_row.columns and x_lrs:
+                    val = float(iforest_row[col].iloc[0])
+                    fig.add_trace(go.Scatter(
+                        x=[x_lrs[0], x_lrs[-1]],
+                        y=[val, val],
+                        mode="lines",
+                        name="IForest (0 labels)",
+                        line=dict(color=model_colors["iforest"], width=2, dash="dash"),
+                    ))
+                fig.update_layout(
+                    title=title,
+                    yaxis=dict(title=y_label, range=[0, 1], gridcolor="#1e1e2e"),
+                    **_chart_layout,
+                )
+                return fig
+
+            col1, col2 = st.columns(2)
+            col1.plotly_chart(
+                _metric_fig("AUC-ROC vs Label Availability",  "AUC-ROC",  "auc_roc"),
+                use_container_width=True,
+            )
+            col2.plotly_chart(
+                _metric_fig("Recall vs Label Availability",   "Recall",   "anomaly_recall"),
+                use_container_width=True,
+            )
+            col3, col4 = st.columns(2)
+            col3.plotly_chart(
+                _metric_fig("Precision vs Label Availability", "Precision", "anomaly_precision"),
+                use_container_width=True,
+            )
+            col4.plotly_chart(
+                _metric_fig("F1 vs Label Availability",        "F1",        "anomaly_f1"),
+                use_container_width=True,
+            )
+
+            # ── Per-attack recall ────────────────────────────────────────────
+            st.markdown("### Per-Attack Recall")
+            available_lrs = x_lrs if x_lrs else []
+            if available_lrs:
+                sel_lr = st.select_slider(
+                    "XGBoost Label Ratio",
+                    options=available_lrs,
+                    value=available_lrs[-1],
+                    format_func=lambda v: f"{v:.0%}",
+                    key="cmp_lr",
+                )
+                xgb_sel = xgb_data[xgb_data["label_ratio"] == sel_lr]
+                attack_types = ["h1", "h2", "h3", "h4", "h5", "h6"]
+                fig_pa = go.Figure()
+
+                if not iforest_row.empty:
+                    pa_if = iforest_row.iloc[0].get("per_attack", {})
+                    if isinstance(pa_if, dict):
+                        fig_pa.add_trace(go.Bar(
+                            name="IForest (0 labels)",
+                            x=attack_types,
+                            y=[pa_if.get(a, {}).get("recall", 0) for a in attack_types],
+                            marker_color=model_colors["iforest"],
+                        ))
+
+                if not xgb_sel.empty:
+                    pa_xgb = xgb_sel.iloc[0].get("per_attack", {})
+                    if isinstance(pa_xgb, dict):
+                        fig_pa.add_trace(go.Bar(
+                            name=f"XGBoost (lr={sel_lr:.0%})",
+                            x=attack_types,
+                            y=[pa_xgb.get(a, {}).get("recall", 0) for a in attack_types],
+                            marker_color=model_colors["xgboost"],
+                        ))
+
+                fig_pa.update_layout(
+                    barmode="group",
+                    title=f"Per-Attack Recall — contamination={sel_cont:.0%}, XGBoost lr={sel_lr:.0%}",
+                    xaxis=dict(title="Attack Type", gridcolor="#1e1e2e"),
+                    yaxis=dict(title="Recall", range=[0, 1], gridcolor="#1e1e2e"),
+                    paper_bgcolor="#0f0f1a", plot_bgcolor="#0f0f1a", font_color="#e0e0e0",
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02),
+                )
+                st.plotly_chart(fig_pa, use_container_width=True)
+
+            # ── Summary table for selected contamination ─────────────────────
+            st.markdown("### Results at Selected Contamination")
+            disp_cols = [c for c in ["model", "label_ratio", "auc_roc",
+                                      "anomaly_precision", "anomaly_recall", "anomaly_f1"]
+                         if c in cont_data.columns]
+            rename_map = {
+                "auc_roc": "AUC-ROC", "label_ratio": "Label Ratio",
+                "anomaly_precision": "Precision", "anomaly_recall": "Recall", "anomaly_f1": "F1",
+            }
+            fmt = {
+                "AUC-ROC": "{:.3f}", "Label Ratio": "{:.2f}",
+                "Precision": "{:.3f}", "Recall": "{:.3f}", "F1": "{:.3f}",
+            }
+            st.dataframe(
+                cont_data[disp_cols].rename(columns=rename_map).style.format(fmt),
+                use_container_width=True,
+            )

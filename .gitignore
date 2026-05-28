@@ -1,14 +1,31 @@
-REFIT/
-models/
-data/
-!src/**
-# Python-generated files
-__pycache__/
-*.py[oc]
-build/
-dist/
-wheels/
-*.egg-info
+# Virtual environment
+.venv/
+venv/
+env/
 
-# Virtual environments
-.venv
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Dataset (too large for GitHub)
+REFIT/
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment variables
+.env
+.env.*
+
+# uv cache
+.cache/

@@ -1,0 +1,102 @@
+{
+  "overall": {
+    "0": {
+      "precision": 0.9551539491298527,
+      "recall": 0.9992997198879552,
+      "f1-score": 0.9767282683093771,
+      "support": 2856.0
+    },
+    "1": {
+      "precision": 0.75,
+      "recall": 0.04285714285714286,
+      "f1-score": 0.08108108108108109,
+      "support": 140.0
+    },
+    "accuracy": 0.9546061415220294,
+    "macro avg": {
+      "precision": 0.8525769745649263,
+      "recall": 0.5210784313725491,
+      "f1-score": 0.5289046746952291,
+      "support": 2996.0
+    },
+    "weighted avg": {
+      "precision": 0.9455673159929437,
+      "recall": 0.9546061415220294,
+      "f1-score": 0.9348755960089893,
+      "support": 2996.0
+    }
+  },
+  "per_attack": {
+    "h6": {
+      "precision": 0.6,
+      "recall": 0.09375,
+      "f1-score": 0.16216216216216217,
+      "support": 32.0
+    },
+    "h3": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1-score": 0.0,
+      "support": 19.0
+    },
+    "h4": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1-score": 0.0,
+      "support": 20.0
+    },
+    "h2": {
+      "precision": 0.3333333333333333,
+      "recall": 0.043478260869565216,
+      "f1-score": 0.07692307692307693,
+      "support": 23.0
+    },
+    "h1": {
+      "precision": 0.5,
+      "recall": 0.08695652173913043,
+      "f1-score": 0.14814814814814814,
+      "support": 23.0
+    },
+    "h5": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1-score": 0.0,
+      "support": 23.0
+    }
+  },
+  "auc_roc": 0.613562925170068,
+  "confusion_matrix": [
+    [
+      2854,
+      2
+    ],
+    [
+      134,
+      6
+    ]
+  ],
+  "feature_cols": [
+    "mean",
+    "median",
+    "min",
+    "max",
+    "std",
+    "peak_to_avg_ratio",
+    "skewness",
+    "kurtosis",
+    "mean_abs_diff",
+    "zero_ratio",
+    "block_night",
+    "block_morning",
+    "block_afternoon",
+    "block_evening"
+  ],
+  "anomaly_precision": 0.75,
+  "anomaly_recall": 0.0429,
+  "anomaly_f1": 0.0811,
+  "model": "xgboost",
+  "contamination": 0.05,
+  "label_ratio": 0.1,
+  "features": "engineered",
+  "scope": "per-house"
+}

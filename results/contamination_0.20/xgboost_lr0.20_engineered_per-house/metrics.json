@@ -1,0 +1,102 @@
+{
+  "overall": {
+    "0": {
+      "precision": 0.8212173913043478,
+      "recall": 0.9962025316455696,
+      "f1-score": 0.9002859866539561,
+      "support": 2370.0
+    },
+    "1": {
+      "precision": 0.9256198347107438,
+      "recall": 0.17891373801916932,
+      "f1-score": 0.2998661311914324,
+      "support": 626.0
+    },
+    "accuracy": 0.82543391188251,
+    "macro avg": {
+      "precision": 0.8734186130075459,
+      "recall": 0.5875581348323695,
+      "f1-score": 0.6000760589226942,
+      "support": 2996.0
+    },
+    "weighted avg": {
+      "precision": 0.8430317870227737,
+      "recall": 0.82543391188251,
+      "f1-score": 0.7748311036367533,
+      "support": 2996.0
+    }
+  },
+  "per_attack": {
+    "h6": {
+      "precision": 0.4375,
+      "recall": 0.07142857142857142,
+      "f1-score": 0.12280701754385964,
+      "support": 98.0
+    },
+    "h2": {
+      "precision": 0.75,
+      "recall": 0.24107142857142858,
+      "f1-score": 0.36486486486486486,
+      "support": 112.0
+    },
+    "h3": {
+      "precision": 0.775,
+      "recall": 0.2818181818181818,
+      "f1-score": 0.41333333333333333,
+      "support": 110.0
+    },
+    "h5": {
+      "precision": 0.55,
+      "recall": 0.12222222222222222,
+      "f1-score": 0.2,
+      "support": 90.0
+    },
+    "h1": {
+      "precision": 0.5714285714285714,
+      "recall": 0.11428571428571428,
+      "f1-score": 0.19047619047619047,
+      "support": 105.0
+    },
+    "h4": {
+      "precision": 0.7272727272727273,
+      "recall": 0.21621621621621623,
+      "f1-score": 0.3333333333333333,
+      "support": 111.0
+    }
+  },
+  "auc_roc": 0.8879184022862997,
+  "confusion_matrix": [
+    [
+      2361,
+      9
+    ],
+    [
+      514,
+      112
+    ]
+  ],
+  "feature_cols": [
+    "mean",
+    "median",
+    "min",
+    "max",
+    "std",
+    "peak_to_avg_ratio",
+    "skewness",
+    "kurtosis",
+    "mean_abs_diff",
+    "zero_ratio",
+    "block_night",
+    "block_morning",
+    "block_afternoon",
+    "block_evening"
+  ],
+  "anomaly_precision": 0.9256,
+  "anomaly_recall": 0.1789,
+  "anomaly_f1": 0.2999,
+  "model": "xgboost",
+  "contamination": 0.2,
+  "label_ratio": 0.2,
+  "features": "engineered",
+  "scope": "per-house"
+}

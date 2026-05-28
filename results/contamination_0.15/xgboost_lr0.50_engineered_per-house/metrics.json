@@ -1,0 +1,102 @@
+{
+  "overall": {
+    "0": {
+      "precision": 0.9039444850255661,
+      "recall": 0.982922954725973,
+      "f1-score": 0.9417808219178082,
+      "support": 2518.0
+    },
+    "1": {
+      "precision": 0.8333333333333334,
+      "recall": 0.4497907949790795,
+      "f1-score": 0.5842391304347826,
+      "support": 478.0
+    },
+    "accuracy": 0.8978638184245661,
+    "macro avg": {
+      "precision": 0.8686389091794497,
+      "recall": 0.7163568748525262,
+      "f1-score": 0.7630099761762954,
+      "support": 2996.0
+    },
+    "weighted avg": {
+      "precision": 0.8926787538810778,
+      "recall": 0.8978638184245661,
+      "f1-score": 0.8847364532499556,
+      "support": 2996.0
+    }
+  },
+  "per_attack": {
+    "h5": {
+      "precision": 0.44871794871794873,
+      "recall": 0.44871794871794873,
+      "f1-score": 0.44871794871794873,
+      "support": 78.0
+    },
+    "h3": {
+      "precision": 0.4819277108433735,
+      "recall": 0.5,
+      "f1-score": 0.49079754601226994,
+      "support": 80.0
+    },
+    "h6": {
+      "precision": 0.328125,
+      "recall": 0.25609756097560976,
+      "f1-score": 0.2876712328767123,
+      "support": 82.0
+    },
+    "h4": {
+      "precision": 0.4691358024691358,
+      "recall": 0.5428571428571428,
+      "f1-score": 0.5033112582781457,
+      "support": 70.0
+    },
+    "h1": {
+      "precision": 0.4189189189189189,
+      "recall": 0.3974358974358974,
+      "f1-score": 0.40789473684210525,
+      "support": 78.0
+    },
+    "h2": {
+      "precision": 0.5376344086021505,
+      "recall": 0.5555555555555556,
+      "f1-score": 0.546448087431694,
+      "support": 90.0
+    }
+  },
+  "auc_roc": 0.9381839874244353,
+  "confusion_matrix": [
+    [
+      2475,
+      43
+    ],
+    [
+      263,
+      215
+    ]
+  ],
+  "feature_cols": [
+    "mean",
+    "median",
+    "min",
+    "max",
+    "std",
+    "peak_to_avg_ratio",
+    "skewness",
+    "kurtosis",
+    "mean_abs_diff",
+    "zero_ratio",
+    "block_night",
+    "block_morning",
+    "block_afternoon",
+    "block_evening"
+  ],
+  "anomaly_precision": 0.8333,
+  "anomaly_recall": 0.4498,
+  "anomaly_f1": 0.5842,
+  "model": "xgboost",
+  "contamination": 0.15,
+  "label_ratio": 0.5,
+  "features": "engineered",
+  "scope": "per-house"
+}
